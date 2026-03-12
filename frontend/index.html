@@ -100,6 +100,9 @@
     font-size: 12px; font-weight: 600; text-decoration: none;
   }
   .instance-card .card-link:hover { opacity: 0.9; }
+  .instance-card .btn-delete { background: none; border: 1px solid rgba(255,80,80,0.3); color: #ff5050; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; transition: all 0.2s; }
+  .instance-card .btn-delete:hover { background: rgba(255,80,80,0.15); border-color: #ff5050; }
+  .instance-card .card-actions { display: flex; gap: 8px; align-items: center; }
 
   /* ── Create Instance Card ── */
   .create-card {
@@ -394,13 +397,33 @@ async function loadInstances() {
       <div class="card-meta">${i.llm_provider || ''} · ${i.llm_model || ''}</div>
       <div class="card-footer">
         <span class="card-sprints">${i.sprints_used} sprints usati</span>
-        ${i.domain ? `<a class="card-link" href="${i.domain}" target="_blank">Apri ↗</a>` : '<span style="color:var(--text-dim);font-size:12px">Deploy in corso...</span>'}
+        <div class="card-actions">
+          ${i.domain ? `<a class="card-link" href="${i.domain}" target="_blank">Apri ↗</a>` : '<span style="color:var(--text-dim);font-size:12px">Deploy in corso...</span>'}
+          <button class="btn-delete" onclick="deleteInstance('${i.id}', event)" title="Elimina istanza">🗑️</button>
+        </div>
       </div>
     </div>
   `).join('') + `
     <div class="create-card" onclick="showPage('marketplace')">
       <span class="plus">+</span><span>Nuova Istanza</span>
     </div>`;
+}
+
+async function deleteInstance(instanceId, event) {
+  event.stopPropagation();
+  if (!confirm('Sei sicuro di voler eliminare questa istanza? Il progetto Railway verrà cancellato definitivamente.')) return;
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    const res = await apiFetch(`${API}/api/instances/${instanceId}`, { method: 'DELETE' });
+    if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Errore'); }
+    await loadInstances();
+  } catch(e) {
+    alert('Errore eliminazione: ' + e.message);
+    btn.disabled = false;
+    btn.textContent = '🗑️';
+  }
 }
 
 // ── Marketplace ──────────────────────────────────────────────────────────────
