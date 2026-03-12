@@ -130,7 +130,7 @@ async def seed_templates():
     """Seed the marketplace with initial templates if empty."""
     import json
     from sqlalchemy import select, func
-    from app.database import async_session
+    from app.database import _get_session_factory
     from app.models import Template
 
     seed_file = Path(__file__).parent.parent / "seed" / "templates.json"
@@ -138,7 +138,8 @@ async def seed_templates():
         logger.warning("No seed/templates.json found, skipping template seeding")
         return
 
-    async with async_session() as session:
+    factory = _get_session_factory()
+    async with factory() as session:
         result = await session.execute(select(func.count(Template.id)))
         count = result.scalar()
         if count > 0:
