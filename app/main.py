@@ -30,24 +30,40 @@ logger = logging.getLogger("orchestrator")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     import asyncio
+    import os
+
     logger.info("Starting Agent Orchestrator...")
+    logger.info(f"  PORT={os.environ.get('PORT', 'not set')}")
+    logger.info(f"  DATABASE_URL={'set' if os.environ.get('DATABASE_URL') else 'NOT SET'}")
+    logger.info(f"  DATABASE_PUBLIC_URL={'set' if os.environ.get('DATABASE_PUBLIC_URL') else 'not set'}")
+    logger.info(f"  JWT_SECRET={'set' if os.environ.get('JWT_SECRET') else 'NOT SET (using default)'}")
+    logger.info(f"  FERNET_KEY={'set' if os.environ.get('FERNET_KEY') else 'NOT SET'}")
+    logger.info(f"  RAILWAY_API_TOKEN={'set' if os.environ.get('RAILWAY_API_TOKEN') else 'not set'}")
 
     # Retry DB connection (Railway DB may take a moment to be ready)
-    for attempt in range(10):
+    db_ready = False
+    for attempt in range(15):
         try:
             await init_db()
-            logger.info("Database initialized")
+            logger.info("Database initialized successfully")
+            db_ready = True
             break
         except Exception as e:
-            if attempt < 9:
-                logger.warning(f"Database not ready (attempt {attempt + 1}/10): {e}")
-                await asyncio.sleep(3)
+            if attempt < 14:
+                logger.warning(f"Database not ready (attempt {attempt + 1}/15): {type(e).__name__}: {e}")
+                await asyncio.sleep(2)
             else:
-                logger.error(f"Failed to connect to database after 10 attempts: {e}")
-                raise
+                logger.error(f"Failed to connect to database after 15 attempts: {e}")
+                # Don't crash — let the health endpoint report the issue
+                app.state.db_error = str(e)
 
-    await seed_templates()
-    logger.info("Templates seeded")
+    if db_ready:
+        try:
+            await seed_templates()
+            logger.info("Templates seeded")
+        except Exception as e:
+            logger.error(f"Failed to seed templates: {e}")
+
     yield
     logger.info("Shutting down Agent Orchestrator")
 
@@ -141,6 +157,9 @@ async def seed_templates():
 
 @app.get("/health")
 async def health():
+    db_error = getattr(app.state, "db_error", None)
+    if db_error:
+        return {"status": "degraded", "service": "agent-orchestrator", "db_error": db_error}
     return {"status": "ok", "service": "agent-orchestrator"}
 
 

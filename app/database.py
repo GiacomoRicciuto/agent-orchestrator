@@ -1,29 +1,42 @@
 """
 Database engine and session management.
+Lazy initialization to avoid crashes at import time.
 """
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
 from sqlalchemy.orm import DeclarativeBase
-from app.config import get_settings
 
 
 class Base(DeclarativeBase):
     pass
 
 
-engine = create_async_engine(
-    get_settings().async_database_url,
-    echo=False,
-    pool_size=10,
-    max_overflow=20,
-)
+# Lazy engine — created on first use, not at import time
+_engine = None
+_async_session = None
 
-async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+def _get_engine():
+    global _engine
+    if _engine is None:
+        from app.config import get_settings
+        url = get_settings().async_database_url
+        print(f"  [DB] Connecting to: {url[:30]}...{url[-20:]}")
+        _engine = create_async_engine(url, echo=False, pool_size=10, max_overflow=20)
+    return _engine
+
+
+def _get_session_factory():
+    global _async_session
+    if _async_session is None:
+        _async_session = async_sessionmaker(_get_engine(), class_=AsyncSession, expire_on_commit=False)
+    return _async_session
 
 
 async def get_db() -> AsyncSession:
     """Dependency: yields a database session."""
-    async with async_session() as session:
+    factory = _get_session_factory()
+    async with factory() as session:
         try:
             yield session
             await session.commit()
@@ -33,6 +46,7 @@ async def get_db() -> AsyncSession:
 
 
 async def init_db():
-    """Create all tables (for development). Use Alembic migrations in production."""
+    """Create all tables."""
+    engine = _get_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
