@@ -1,5 +1,6 @@
 """
 Railway GraphQL API client for programmatic instance provisioning.
+Schema verified against live Railway API (March 2026).
 """
 
 import httpx
@@ -60,7 +61,7 @@ class RailwayClient:
             "input": {
                 "name": name,
                 "description": description,
-                "teamId": self.workspace_id,
+                "workspaceId": self.workspace_id,
             }
         })
         return data["projectCreate"]
@@ -166,9 +167,10 @@ class RailwayClient:
     # ── Volume Operations ─────────────────────────────────────────────────
 
     async def create_volume(
-        self, project_id: str, environment_id: str, mount_path: str = "/data/generations"
+        self, project_id: str, environment_id: str, service_id: str,
+        mount_path: str = "/data/generations"
     ) -> dict:
-        """Create a persistent volume."""
+        """Create a persistent volume attached to a service."""
         query = """
         mutation($input: VolumeCreateInput!) {
             volumeCreate(input: $input) {
@@ -181,8 +183,8 @@ class RailwayClient:
             "input": {
                 "projectId": project_id,
                 "environmentId": environment_id,
+                "serviceId": service_id,
                 "mountPath": mount_path,
-                "name": "generations",
             }
         })
         return data["volumeCreate"]
@@ -221,29 +223,3 @@ class RailwayClient:
             "environmentId": environment_id,
         })
         return data
-
-    # ── Status Operations ─────────────────────────────────────────────────
-
-    async def get_service_deployments(self, project_id: str, service_id: str, environment_id: str) -> list:
-        """Get recent deployments for a service."""
-        query = """
-        query($input: DeploymentListInput!) {
-            deployments(input: $input) {
-                edges {
-                    node {
-                        id
-                        status
-                        createdAt
-                    }
-                }
-            }
-        }
-        """
-        data = await self._execute(query, {
-            "input": {
-                "projectId": project_id,
-                "serviceId": service_id,
-                "environmentId": environment_id,
-            }
-        })
-        return [edge["node"] for edge in data["deployments"]["edges"]]

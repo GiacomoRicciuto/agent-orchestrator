@@ -138,9 +138,9 @@ async def provision_instance(
             service["id"], template.github_repo, template.github_branch
         )
 
-        # 7. Create volume
+        # 7. Create volume (needs serviceId)
         logger.info("Creating persistent volume")
-        await railway.create_volume(project["id"], env_id)
+        await railway.create_volume(project["id"], env_id, service["id"])
 
         # 8. Set environment variables
         env_vars = _build_env_vars(config, template)
