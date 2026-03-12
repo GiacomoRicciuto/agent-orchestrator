@@ -29,9 +29,23 @@ logger = logging.getLogger("orchestrator")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    import asyncio
     logger.info("Starting Agent Orchestrator...")
-    await init_db()
-    logger.info("Database initialized")
+
+    # Retry DB connection (Railway DB may take a moment to be ready)
+    for attempt in range(10):
+        try:
+            await init_db()
+            logger.info("Database initialized")
+            break
+        except Exception as e:
+            if attempt < 9:
+                logger.warning(f"Database not ready (attempt {attempt + 1}/10): {e}")
+                await asyncio.sleep(3)
+            else:
+                logger.error(f"Failed to connect to database after 10 attempts: {e}")
+                raise
+
     await seed_templates()
     logger.info("Templates seeded")
     yield
@@ -48,9 +62,15 @@ app = FastAPI(
 # ── CORS ──────────────────────────────────────────────────────────────────────
 
 settings = get_settings()
+_cors_origins = [settings.platform_domain, "http://localhost:8000", "http://localhost:3000"]
+# Add Railway domain if available
+import os as _os
+_railway_domain = _os.environ.get("RAILWAY_PUBLIC_DOMAIN")
+if _railway_domain:
+    _cors_origins.append(f"https://{_railway_domain}")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.platform_domain, "http://localhost:8000", "http://localhost:3000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -130,4 +150,4 @@ if __name__ == "__main__":
     import uvicorn
     import os
     port = int(os.environ.get("PORT", 8000))
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=os.environ.get("DEV") == "1")

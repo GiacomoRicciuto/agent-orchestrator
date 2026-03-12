@@ -7,8 +7,21 @@ from functools import lru_cache
 
 
 class Settings(BaseSettings):
-    # Database
+    # Database — Railway provides DATABASE_URL with postgresql:// prefix
+    # We also accept DATABASE_PUBLIC_URL for external access
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/orchestrator"
+    database_public_url: str = ""
+
+    @property
+    def async_database_url(self) -> str:
+        """Convert standard PostgreSQL URL to asyncpg format."""
+        url = self.database_public_url or self.database_url
+        # Railway uses postgresql:// — convert to asyncpg
+        if url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        return url
 
     # Auth
     jwt_secret: str = "CHANGE-ME-IN-PRODUCTION-USE-64-RANDOM-CHARS"
