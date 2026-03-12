@@ -1,0 +1,90 @@
+[
+  {
+    "slug": "elevenlabs-voice-agent",
+    "name": "ElevenLabs Voice Agent Optimizer",
+    "description": "Crea, testa e ottimizza agenti vocali ElevenLabs in modo completamente autonomo. Il sistema genera prompt PATEOAS, simula conversazioni con 8+ personas, e itera fino all'80% di pass rate. Include integrazione Notion per tracking granulare.",
+    "icon": "🎙️",
+    "category": "voice",
+    "github_repo": "GiacomoRicciuto/elevenlabs-prompt-agent",
+    "github_branch": "main",
+    "required_vars": [
+      {
+        "name": "ELEVENLABS_API_KEY",
+        "label": "ElevenLabs API Key",
+        "type": "password",
+        "placeholder": "xi-...",
+        "required": true,
+        "help": "Ottieni la tua API key da elevenlabs.io/app/settings/api-keys"
+      },
+      {
+        "name": "NOTION_API_KEY",
+        "label": "Notion Integration Token",
+        "type": "password",
+        "placeholder": "secret_...",
+        "required": true,
+        "help": "Crea un'integrazione su notion.so/my-integrations"
+      },
+      {
+        "name": "NOTION_PARENT_PAGE_ID",
+        "label": "Notion Parent Page ID",
+        "type": "text",
+        "placeholder": "abc123def456...",
+        "required": true,
+        "help": "ID della pagina Notion condivisa con l'integrazione"
+      }
+    ],
+    "llm_options": [
+      {
+        "provider": "anthropic",
+        "label": "Anthropic (Claude)",
+        "models": [
+          {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4 (Recommended)", "cost_per_sprint": 0.65},
+          {"id": "claude-opus-4", "name": "Claude Opus 4 (Premium)", "cost_per_sprint": 2.85}
+        ],
+        "default_model": "claude-sonnet-4-6",
+        "requires_key": true
+      },
+      {
+        "provider": "openai",
+        "label": "OpenAI (GPT)",
+        "models": [
+          {"id": "gpt-4o", "name": "GPT-4o", "cost_per_sprint": 0.60},
+          {"id": "gpt-4o-mini", "name": "GPT-4o Mini (Budget)", "cost_per_sprint": 0.25}
+        ],
+        "default_model": "gpt-4o",
+        "requires_key": true
+      },
+      {
+        "provider": "google",
+        "label": "Google (Gemini)",
+        "models": [
+          {"id": "gemini-2.0-flash", "name": "Gemini 2.0 Flash (Fast & Cheap)", "cost_per_sprint": 0.20}
+        ],
+        "default_model": "gemini-2.0-flash",
+        "requires_key": true
+      },
+      {
+        "provider": "ollama",
+        "label": "Ollama (Self-Hosted)",
+        "models": [
+          {"id": "custom", "name": "Custom Model", "cost_per_sprint": 0.15}
+        ],
+        "default_model": "custom",
+        "requires_key": false,
+        "requires_base_url": true
+      },
+      {
+        "provider": "custom",
+        "label": "OpenAI-Compatible (HuggingFace, vLLM, etc.)",
+        "models": [
+          {"id": "custom", "name": "Custom Model", "cost_per_sprint": 0.15}
+        ],
+        "default_model": "custom",
+        "requires_key": true,
+        "requires_base_url": true
+      }
+    ],
+    "cost_per_sprint": 1.00,
+    "is_active": true
+  }
+]

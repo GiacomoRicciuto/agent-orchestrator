@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Orchestrator</title>
+<style>
+  :root {
+    --bg: #1a1a2e; --bg2: #16213e; --surface: #0f3460;
+    --surface2: #1a1a3e; --border: #2a2a5e; --text: #e8e8f0;
+    --text-dim: #8888aa; --primary: #e94560; --primary-light: #ff6b81;
+    --green: #00d2a0; --amber: #ffc107; --red: #e94560;
+    --radius: 12px; --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; }
+  a { color: var(--primary-light); text-decoration: none; }
+
+  /* ── Auth Screen ── */
+  .auth-overlay {
+    position: fixed; inset: 0; background: var(--bg); z-index: 9999;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .auth-box {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 48px 40px; max-width: 420px; width: 90%; text-align: center;
+  }
+  .auth-box h1 { font-size: 28px; margin-bottom: 8px; font-weight: 700; }
+  .auth-box h1 span { color: var(--primary); }
+  .auth-box .subtitle { color: var(--text-dim); margin-bottom: 32px; font-size: 14px; }
+  .auth-box input {
+    width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 14px; margin-bottom: 12px; outline: none;
+  }
+  .auth-box input:focus { border-color: var(--primary); }
+  .auth-box .btn-auth {
+    width: 100%; padding: 12px; border-radius: 8px; border: none;
+    background: var(--primary); color: white; font-weight: 600; font-size: 15px;
+    cursor: pointer; margin-top: 8px; transition: opacity 0.2s;
+  }
+  .auth-box .btn-auth:hover { opacity: 0.9; }
+  .auth-box .toggle { color: var(--text-dim); font-size: 13px; margin-top: 16px; }
+  .auth-box .toggle a { cursor: pointer; color: var(--primary-light); }
+  .auth-box .error { color: var(--red); font-size: 13px; margin-bottom: 12px; min-height: 18px; }
+
+  /* ── Layout ── */
+  .app { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 260px; background: var(--bg2); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+  }
+  .sidebar-header { padding: 20px; border-bottom: 1px solid var(--border); }
+  .sidebar-header h2 { font-size: 16px; font-weight: 700; }
+  .sidebar-header h2 span { color: var(--primary); }
+  .sidebar-user { padding: 12px 20px; border-bottom: 1px solid var(--border); font-size: 13px; color: var(--text-dim); display: flex; justify-content: space-between; align-items: center; }
+  .sidebar-user .credits { color: var(--green); font-weight: 600; }
+  .sidebar-nav { flex: 1; padding: 12px 8px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;
+    cursor: pointer; transition: background 0.15s; font-size: 14px; color: var(--text-dim);
+  }
+  .nav-item:hover { background: rgba(233,69,96,0.08); color: var(--text); }
+  .nav-item.active { background: rgba(233,69,96,0.15); color: var(--primary-light); font-weight: 600; }
+  .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+  .sidebar-footer { padding: 12px 20px; border-top: 1px solid var(--border); }
+  .btn-logout {
+    width: 100%; padding: 8px; background: transparent; border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text-dim); cursor: pointer; font-size: 13px;
+  }
+  .btn-logout:hover { border-color: var(--red); color: var(--red); }
+
+  /* ── Main Content ── */
+  .main { flex: 1; padding: 32px; overflow-y: auto; }
+  .page-header { margin-bottom: 32px; }
+  .page-header h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+  .page-header p { color: var(--text-dim); font-size: 14px; }
+
+  /* ── Instance Cards ── */
+  .instances-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
+  .instance-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 24px; transition: border-color 0.2s; cursor: pointer;
+  }
+  .instance-card:hover { border-color: rgba(233,69,96,0.4); }
+  .instance-card .card-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+  .instance-card .card-icon { font-size: 32px; }
+  .instance-card .card-status {
+    padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+  }
+  .status-active { background: rgba(0,210,160,0.15); color: var(--green); }
+  .status-deploying { background: rgba(255,193,7,0.15); color: var(--amber); }
+  .status-error { background: rgba(233,69,96,0.15); color: var(--red); }
+  .status-provisioning { background: rgba(136,136,170,0.15); color: var(--text-dim); }
+  .instance-card h3 { font-size: 16px; margin-bottom: 4px; }
+  .instance-card .card-meta { color: var(--text-dim); font-size: 13px; margin-bottom: 16px; }
+  .instance-card .card-footer { display: flex; justify-content: space-between; align-items: center; }
+  .instance-card .card-sprints { font-size: 13px; color: var(--text-dim); }
+  .instance-card .card-link {
+    padding: 6px 14px; border-radius: 6px; background: var(--primary); color: white;
+    font-size: 12px; font-weight: 600; text-decoration: none;
+  }
+  .instance-card .card-link:hover { opacity: 0.9; }
+
+  /* ── Create Instance Card ── */
+  .create-card {
+    border: 2px dashed var(--border); display: flex; align-items: center; justify-content: center;
+    min-height: 180px; flex-direction: column; gap: 8px; color: var(--text-dim);
+    background: transparent; cursor: pointer; border-radius: var(--radius);
+    transition: border-color 0.2s, color 0.2s;
+  }
+  .create-card:hover { border-color: var(--primary); color: var(--primary-light); }
+  .create-card .plus { font-size: 36px; }
+
+  /* ── Template Cards (Marketplace) ── */
+  .template-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; }
+  .template-card {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 28px; transition: border-color 0.2s;
+  }
+  .template-card:hover { border-color: var(--primary); }
+  .template-card .t-icon { font-size: 40px; margin-bottom: 16px; }
+  .template-card h3 { font-size: 17px; margin-bottom: 8px; }
+  .template-card p { color: var(--text-dim); font-size: 13px; line-height: 1.6; margin-bottom: 20px; }
+  .template-card .t-cost { font-size: 13px; color: var(--green); margin-bottom: 16px; }
+  .btn-create-instance {
+    width: 100%; padding: 10px; border-radius: 8px; border: none; background: var(--primary);
+    color: white; font-weight: 600; font-size: 14px; cursor: pointer;
+  }
+  .btn-create-instance:hover { opacity: 0.9; }
+
+  /* ── Create Instance Modal ── */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000;
+    display: none; align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 32px; max-width: 560px; width: 90%; max-height: 85vh; overflow-y: auto;
+  }
+  .modal h2 { font-size: 20px; margin-bottom: 24px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .form-group .help { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+  .form-group input, .form-group select {
+    width: 100%; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); font-size: 14px; outline: none;
+  }
+  .form-group input:focus, .form-group select:focus { border-color: var(--primary); }
+  .modal-actions { display: flex; gap: 12px; margin-top: 24px; }
+  .modal-actions button {
+    flex: 1; padding: 12px; border-radius: 8px; border: none; font-weight: 600;
+    font-size: 14px; cursor: pointer;
+  }
+  .btn-cancel { background: transparent; border: 1px solid var(--border) !important; color: var(--text-dim); }
+  .btn-confirm { background: var(--primary); color: white; }
+
+  /* ── Billing ── */
+  .balance-card {
+    background: linear-gradient(135deg, var(--surface), var(--surface2)); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 32px; margin-bottom: 24px; display: flex;
+    justify-content: space-between; align-items: center;
+  }
+  .balance-amount { font-size: 36px; font-weight: 700; }
+  .balance-amount span { color: var(--green); }
+  .balance-label { color: var(--text-dim); font-size: 14px; margin-top: 4px; }
+  .btn-topup {
+    padding: 12px 28px; border-radius: 8px; border: none; background: var(--green);
+    color: #000; font-weight: 700; font-size: 15px; cursor: pointer;
+  }
+  .txn-table { width: 100%; border-collapse: collapse; }
+  .txn-table th, .txn-table td { text-align: left; padding: 10px 12px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  .txn-table th { color: var(--text-dim); font-weight: 600; }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ── Auth Screen ── -->
+<div class="auth-overlay" id="auth-screen">
+  <div class="auth-box">
+    <h1>Agent <span>Orchestrator</span></h1>
+    <p class="subtitle">La piattaforma per creare e gestire agenti AI autonomi</p>
+    <div class="error" id="auth-error"></div>
+    <div id="login-form">
+      <input type="email" id="auth-email" placeholder="Email" autocomplete="email">
+      <input type="password" id="auth-password" placeholder="Password" autocomplete="current-password">
+      <button class="btn-auth" onclick="doLogin()">Accedi</button>
+      <p class="toggle">Non hai un account? <a onclick="showRegister()">Registrati</a></p>
+    </div>
+    <div id="register-form" class="hidden">
+      <input type="text" id="reg-name" placeholder="Nome" autocomplete="name">
+      <input type="email" id="reg-email" placeholder="Email" autocomplete="email">
+      <input type="password" id="reg-password" placeholder="Password (min 8 caratteri)" autocomplete="new-password">
+      <button class="btn-auth" onclick="doRegister()">Crea Account</button>
+      <p class="toggle">Hai già un account? <a onclick="showLogin()">Accedi</a></p>
+    </div>
+  </div>
+</div>
+
+<!-- ── App ── -->
+<div class="app" id="app" style="display:none">
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-header"><h2>Agent <span>Orchestrator</span></h2></div>
+    <div class="sidebar-user">
+      <span id="user-email">-</span>
+      <span class="credits" id="user-credits">0 sprints</span>
+    </div>
+    <div class="sidebar-nav">
+      <div class="nav-item active" data-page="instances" onclick="showPage('instances')">
+        <span class="icon">🏠</span> Le mie Istanze
+      </div>
+      <div class="nav-item" data-page="marketplace" onclick="showPage('marketplace')">
+        <span class="icon">🛒</span> Marketplace
+      </div>
+      <div class="nav-item" data-page="billing" onclick="showPage('billing')">
+        <span class="icon">💰</span> Crediti & Billing
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <button class="btn-logout" onclick="doLogout()">Esci</button>
+    </div>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main">
+    <!-- Instances Page -->
+    <div id="page-instances">
+      <div class="page-header">
+        <h1>Le mie Istanze</h1>
+        <p>I tuoi agenti AI autonomi in esecuzione</p>
+      </div>
+      <div class="instances-grid" id="instances-list">
+        <div class="create-card" onclick="showPage('marketplace')">
+          <span class="plus">+</span>
+          <span>Nuova Istanza</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Marketplace Page -->
+    <div id="page-marketplace" class="hidden">
+      <div class="page-header">
+        <h1>Marketplace</h1>
+        <p>Template pronti per creare nuove istanze di agenti AI</p>
+      </div>
+      <div class="template-grid" id="template-list"></div>
+    </div>
+
+    <!-- Billing Page -->
+    <div id="page-billing" class="hidden">
+      <div class="page-header">
+        <h1>Crediti & Billing</h1>
+        <p>Gestisci i tuoi sprint e le transazioni</p>
+      </div>
+      <div class="balance-card">
+        <div>
+          <div class="balance-amount"><span id="balance-credits">0</span> sprints</div>
+          <div class="balance-label">Saldo disponibile</div>
+        </div>
+        <button class="btn-topup" onclick="doTopup()">+ Ricarica</button>
+      </div>
+      <h3 style="margin-bottom:16px; font-size:16px;">Storico Transazioni</h3>
+      <table class="txn-table">
+        <thead><tr><th>Data</th><th>Tipo</th><th>Importo</th><th>Sprints</th><th>Descrizione</th></tr></thead>
+        <tbody id="txn-list"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── Create Instance Modal ── -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal">
+    <h2 id="modal-title">Crea Istanza</h2>
+    <div id="modal-form"></div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Annulla</button>
+      <button class="btn-confirm" onclick="submitInstance()">Crea Istanza</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = window.location.origin;
+let token = localStorage.getItem('ao_token');
+let currentUser = null;
+let templates = [];
+
+// ── API Fetch ────────────────────────────────────────────────────────────────
+
+async function apiFetch(url, opts = {}) {
+  if (!opts.headers) opts.headers = {};
+  if (token) opts.headers['Authorization'] = `Bearer ${token}`;
+  if (!(opts.body instanceof FormData)) opts.headers['Content-Type'] = 'application/json';
+  const res = await fetch(url, opts);
+  if (res.status === 401) { doLogout(); throw new Error('Unauthorized'); }
+  return res;
+}
+
+// ── Auth ─────────────────────────────────────────────────────────────────────
+
+function showLogin() {
+  document.getElementById('login-form').classList.remove('hidden');
+  document.getElementById('register-form').classList.add('hidden');
+  document.getElementById('auth-error').textContent = '';
+}
+function showRegister() {
+  document.getElementById('login-form').classList.add('hidden');
+  document.getElementById('register-form').classList.remove('hidden');
+  document.getElementById('auth-error').textContent = '';
+}
+
+async function doLogin() {
+  const email = document.getElementById('auth-email').value;
+  const password = document.getElementById('auth-password').value;
+  try {
+    const res = await fetch(`${API}/api/auth/login`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ email, password })
+    });
+    const data = await res.json();
+    if (!res.ok) { document.getElementById('auth-error').textContent = data.detail || 'Errore'; return; }
+    token = data.token;
+    localStorage.setItem('ao_token', token);
+    await loadApp();
+  } catch(e) { document.getElementById('auth-error').textContent = 'Errore di connessione'; }
+}
+
+async function doRegister() {
+  const display_name = document.getElementById('reg-name').value;
+  const email = document.getElementById('reg-email').value;
+  const password = document.getElementById('reg-password').value;
+  try {
+    const res = await fetch(`${API}/api/auth/register`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ email, password, display_name })
+    });
+    const data = await res.json();
+    if (!res.ok) { document.getElementById('auth-error').textContent = data.detail || 'Errore'; return; }
+    token = data.token;
+    localStorage.setItem('ao_token', token);
+    await loadApp();
+  } catch(e) { document.getElementById('auth-error').textContent = 'Errore di connessione'; }
+}
+
+function doLogout() {
+  token = null; currentUser = null;
+  localStorage.removeItem('ao_token');
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+// ── App Loading ──────────────────────────────────────────────────────────────
+
+async function loadApp() {
+  try {
+    const res = await apiFetch(`${API}/api/auth/profile`);
+    currentUser = await res.json();
+    document.getElementById('auth-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+    document.getElementById('user-email').textContent = currentUser.email;
+    document.getElementById('user-credits').textContent = `${currentUser.credits} sprints`;
+    loadInstances();
+    loadTemplates();
+  } catch(e) { doLogout(); }
+}
+
+// ── Pages ────────────────────────────────────────────────────────────────────
+
+function showPage(page) {
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === page));
+  ['instances', 'marketplace', 'billing'].forEach(p => {
+    document.getElementById(`page-${p}`).classList.toggle('hidden', p !== page);
+  });
+  if (page === 'billing') loadBilling();
+}
+
+// ── Instances ────────────────────────────────────────────────────────────────
+
+async function loadInstances() {
+  const res = await apiFetch(`${API}/api/instances/`);
+  const instances = await res.json();
+  const grid = document.getElementById('instances-list');
+  grid.innerHTML = instances.map(i => `
+    <div class="instance-card">
+      <div class="card-top">
+        <span class="card-icon">${i.template_icon || '🤖'}</span>
+        <span class="card-status status-${i.status}">${i.status}</span>
+      </div>
+      <h3>${i.name || 'Istanza'}</h3>
+      <div class="card-meta">${i.llm_provider || ''} · ${i.llm_model || ''}</div>
+      <div class="card-footer">
+        <span class="card-sprints">${i.sprints_used} sprints usati</span>
+        ${i.domain ? `<a class="card-link" href="${i.domain}" target="_blank">Apri ↗</a>` : '<span style="color:var(--text-dim);font-size:12px">Deploy in corso...</span>'}
+      </div>
+    </div>
+  `).join('') + `
+    <div class="create-card" onclick="showPage('marketplace')">
+      <span class="plus">+</span><span>Nuova Istanza</span>
+    </div>`;
+}
+
+// ── Marketplace ──────────────────────────────────────────────────────────────
+
+async function loadTemplates() {
+  const res = await apiFetch(`${API}/api/marketplace/templates`);
+  templates = await res.json();
+  const grid = document.getElementById('template-list');
+  grid.innerHTML = templates.map(t => `
+    <div class="template-card">
+      <div class="t-icon">${t.icon || '📦'}</div>
+      <h3>${t.name}</h3>
+      <p>${t.description || ''}</p>
+      <div class="t-cost">Da €${t.cost_per_sprint}/sprint</div>
+      <button class="btn-create-instance" onclick="openCreateModal('${t.id}')">Crea Istanza</button>
+    </div>
+  `).join('');
+}
+
+// ── Create Instance Modal ────────────────────────────────────────────────────
+
+let selectedTemplate = null;
+
+function openCreateModal(templateId) {
+  selectedTemplate = templates.find(t => t.id === templateId);
+  if (!selectedTemplate) return;
+
+  document.getElementById('modal-title').textContent = `Crea: ${selectedTemplate.name}`;
+  const form = document.getElementById('modal-form');
+
+  let html = '<div class="form-group"><label>Nome istanza</label><input type="text" id="inst-name" placeholder="Es: Il mio agente vocale"></div>';
+
+  // Required vars
+  for (const v of selectedTemplate.required_vars) {
+    html += `<div class="form-group">
+      <label>${v.label}</label>
+      <input type="${v.type === 'password' ? 'password' : 'text'}" id="var-${v.name}" placeholder="${v.placeholder || ''}" ${v.required ? 'required' : ''}>
+      ${v.help ? `<div class="help">${v.help}</div>` : ''}
+    </div>`;
+  }
+
+  // LLM Provider
+  if (selectedTemplate.llm_options?.length) {
+    html += `<div class="form-group"><label>LLM Provider</label><select id="llm-provider" onchange="onLLMChange()">`;
+    for (const opt of selectedTemplate.llm_options) {
+      html += `<option value="${opt.provider}">${opt.label}</option>`;
+    }
+    html += `</select></div>`;
+    html += `<div id="llm-model-group" class="form-group"><label>Modello</label><select id="llm-model"></select></div>`;
+    html += `<div id="llm-key-group" class="form-group"><label>LLM API Key</label><input type="password" id="llm-key" placeholder="API key del provider LLM"></div>`;
+    html += `<div id="llm-url-group" class="form-group hidden"><label>LLM Base URL</label><input type="text" id="llm-url" placeholder="https://your-server.com/v1"><div class="help">Endpoint OpenAI-compatibile per modelli self-hosted</div></div>`;
+  }
+
+  // Instance password
+  html += `<div class="form-group"><label>Password Istanza (ADMIN_API_KEY)</label><input type="password" id="inst-password" placeholder="Scegli una password sicura per accedere"><div class="help">Questa sarà la password per accedere alla tua istanza</div></div>`;
+
+  form.innerHTML = html;
+  document.getElementById('create-modal').classList.add('open');
+
+  if (selectedTemplate.llm_options?.length) onLLMChange();
+}
+
+function onLLMChange() {
+  const provider = document.getElementById('llm-provider').value;
+  const opt = selectedTemplate.llm_options.find(o => o.provider === provider);
+  if (!opt) return;
+
+  const modelSelect = document.getElementById('llm-model');
+  modelSelect.innerHTML = opt.models.map(m => `<option value="${m.id}">${m.name} (€${m.cost_per_sprint}/sprint)</option>`).join('');
+
+  document.getElementById('llm-key-group').classList.toggle('hidden', !opt.requires_key);
+  document.getElementById('llm-url-group').classList.toggle('hidden', !opt.requires_base_url);
+}
+
+function closeModal() {
+  document.getElementById('create-modal').classList.remove('open');
+  selectedTemplate = null;
+}
+
+async function submitInstance() {
+  if (!selectedTemplate) return;
+
+  const config = {};
+  for (const v of selectedTemplate.required_vars) {
+    config[v.name] = document.getElementById(`var-${v.name}`).value;
+  }
+
+  if (selectedTemplate.llm_options?.length) {
+    config.LLM_PROVIDER = document.getElementById('llm-provider').value;
+    config.LLM_MODEL = document.getElementById('llm-model').value;
+    const keyEl = document.getElementById('llm-key');
+    if (keyEl && !keyEl.closest('.hidden')) config.LLM_API_KEY = keyEl.value;
+    const urlEl = document.getElementById('llm-url');
+    if (urlEl && !urlEl.closest('.hidden')) config.LLM_BASE_URL = urlEl.value;
+  }
+
+  config.ADMIN_API_KEY = document.getElementById('inst-password').value;
+  if (!config.ADMIN_API_KEY || config.ADMIN_API_KEY.length < 8) {
+    alert('La password dell\'istanza deve essere di almeno 8 caratteri');
+    return;
+  }
+
+  try {
+    const res = await apiFetch(`${API}/api/instances/`, {
+      method: 'POST',
+      body: JSON.stringify({
+        template_id: selectedTemplate.id,
+        name: document.getElementById('inst-name').value || null,
+        config
+      })
+    });
+    const data = await res.json();
+    if (!res.ok) { alert(data.detail || 'Errore nella creazione'); return; }
+    closeModal();
+    showPage('instances');
+    loadInstances();
+    loadProfile();
+  } catch(e) { alert('Errore: ' + e.message); }
+}
+
+// ── Billing ──────────────────────────────────────────────────────────────────
+
+async function loadBilling() {
+  await loadProfile();
+  document.getElementById('balance-credits').textContent = currentUser.credits;
+
+  const res = await apiFetch(`${API}/api/billing/transactions`);
+  const txns = await res.json();
+  document.getElementById('txn-list').innerHTML = txns.map(t => `
+    <tr>
+      <td>${new Date(t.created_at).toLocaleDateString('it')}</td>
+      <td>${t.type}</td>
+      <td>€${Math.abs(t.amount).toFixed(2)}</td>
+      <td style="color:${t.credits_delta >= 0 ? 'var(--green)' : 'var(--red)'}">${t.credits_delta >= 0 ? '+' : ''}${t.credits_delta}</td>
+      <td>${t.description || '-'}</td>
+    </tr>
+  `).join('') || '<tr><td colspan="5" style="text-align:center;color:var(--text-dim)">Nessuna transazione</td></tr>';
+}
+
+async function loadProfile() {
+  const res = await apiFetch(`${API}/api/auth/profile`);
+  currentUser = await res.json();
+  document.getElementById('user-credits').textContent = `${currentUser.credits} sprints`;
+}
+
+async function doTopup() {
+  const amount = prompt('Quanti euro vuoi ricaricare? (min €1)', '20');
+  if (!amount) return;
+  const res = await apiFetch(`${API}/api/billing/topup`, {
+    method: 'POST', body: JSON.stringify({ amount_eur: parseFloat(amount) })
+  });
+  const data = await res.json();
+  if (!res.ok) { alert(data.detail || 'Errore'); return; }
+  alert(`Ricaricati ${data.credits_added} sprints! Nuovo saldo: ${data.new_balance}`);
+  loadBilling();
+  loadProfile();
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+
+if (token) {
+  loadApp();
+} else {
+  document.getElementById('auth-screen').style.display = 'flex';
+}
+
+document.querySelectorAll('#auth-screen input').forEach(el => {
+  el.addEventListener('keyup', e => { if (e.key === 'Enter') {
+    const isReg = !document.getElementById('register-form').classList.contains('hidden');
+    isReg ? doRegister() : doLogin();
+  }});
+});
+</script>
+</body>
+</html>
